@@ -23,10 +23,10 @@ const defaultProps = {
   multiLine: false,
   sanitise: true,
   tagName: 'div',
-  innerRef: () => {},
-  onBlur: () => {},
-  onKeyDown: () => {},
-  onPaste: () => {},
+  innerRef: () => { },
+  onBlur: () => { },
+  onKeyDown: () => { },
+  onPaste: () => { },
 };
 
 class ContentEditable extends Component {
@@ -35,6 +35,7 @@ class ContentEditable extends Component {
 
     this.state = {
       value: props.content,
+      maxLength: props.maxLength
     };
   }
 
@@ -54,7 +55,8 @@ class ContentEditable extends Component {
   }
 
   sanitiseValue(val) {
-    const { maxLength, multiLine, sanitise } = this.props;
+    const { multiLine, sanitise } = this.props;
+    const {maxLength} = this.state;
 
     if (!sanitise) {
       return val;
@@ -84,19 +86,27 @@ class ContentEditable extends Component {
     const value = sanitise ? this.sanitiseValue(rawValue) : rawValue;
 
     if (this.state.value !== value) {
-      this.setState({ value: rawValue }, () => {
+      this.setState({
+        value: rawValue
+      }, () => {
         this.props.onChange(ev, value);
       });
     }
   }
 
   _onPaste = (ev) => {
-    const { maxLength } = this.props;
+    const { maxLength } = this.state;
 
     ev.preventDefault();
     const text = ev.clipboardData.getData('text').substr(0, maxLength);
-    document.execCommand('insertText', false, text);
-
+    const combinedLength = this.state.value.length + text.length;
+    if (combinedLength > maxLength) {
+      const leftOver = maxLength - this.state.value.length;
+      const appendedText = text.substr(0, leftOver);
+      document.execCommand('insertText', false, appendedText);
+    } else {
+      document.execCommand('insertText', false, text);
+    }
     this.props.onPaste(ev);
   }
 
@@ -115,7 +125,8 @@ class ContentEditable extends Component {
   }
 
   _onKeyDown = (ev) => {
-    const { maxLength, multiLine } = this.props;
+    const { multiLine } = this.props;
+    const { maxLength } = this.state;
     const value = this._element.innerText;
 
     // return key
@@ -124,15 +135,22 @@ class ContentEditable extends Component {
       ev.currentTarget.blur();
     }
 
-    // Ensure we don't exceed `maxLength` (keycode 8 === backspace)
-    if (maxLength && !ev.metaKey && ev.which !== 8 && value.replace(/\s\s/g, ' ').length >= maxLength) {
+    const newLineCount = value.match(new RegExp("\n", "g"));
+    const newMaxLength = newLineCount ?  (this.props.maxLength + newLineCount.length) : this.props.maxLength;
+
+    // Ensure we don't exceed `maxLength` (keycode 8 === backspace, also include arrows for movability within text)
+    if (maxLength && !ev.metaKey && ![8, 37, 38, 39, 40].includes(ev.which) && value.replace(/\s\s/g, ' ').length >= newMaxLength) {
       ev.preventDefault();
     }
-
-    this.props.onKeyDown(ev);
+      this.setState({
+        maxLength: newMaxLength
+      }, () => {
+        this.props.onKeyDown(ev);
+      });
   }
 
-  render() {
+  render() 
+  {
     const { tagName: Element, content, editable, ...props } = this.props;
 
     return (
